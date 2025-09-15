@@ -15,7 +15,7 @@ mod header_tests {
         // payload bytes
         b.extend_from_slice(&[9,9,9]);
         let bytes = Bytes::from(b);
-        let pkt = PRUDPPacket::parse(bytes).expect(\"parse ok\");
+        let pkt = PRUDPPacket::parse(bytes).expect("parse ok");
         assert_eq!(pkt.header.seq, 42u16);
         assert_eq!(pkt.payload.len(), 3);
     }

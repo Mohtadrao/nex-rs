@@ -52,8 +52,8 @@ mod tests {
 
     #[test]
     fn test_rc4_encrypt_decrypt() {
-        let key = b\"secretkey\";
-        let plain = b\"hello world\".to_vec();
+        let key = b"secretkey";
+        let plain = b"hello world".to_vec();
         let mut rc = Rc4::new(key);
         let cipher = rc.process_vec(plain.clone());
         // decrypt by creating new RC4 with same key and processing cipher

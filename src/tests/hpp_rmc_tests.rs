@@ -13,8 +13,8 @@ mod hpp_rmc_tests {
         b.extend_from_slice(&[9,9,9]);
         let payload = Bytes::from(b);
         let framed = HppPacket::encode(&payload);
-        let parsed = HppPacket::parse(framed.clone()).expect(\"hpp parse\");
-        let rmc = RmcMessage::parse(parsed.payload).expect(\"rmc parse\");
+        let parsed = HppPacket::parse(framed.clone()).expect("hpp parse");
+        let rmc = RmcMessage::parse(parsed.payload).expect("rmc parse");
         assert_eq!(rmc.method_id, 123u32);
         assert_eq!(rmc.body.len(), 3);
     }

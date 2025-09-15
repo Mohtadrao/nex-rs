@@ -18,8 +18,8 @@ mod tests {
 
     #[test]
     fn test_rc4_via_encryption() {
-        let key = b\"k1\";
-        let mut data = b\"abcd\".to_vec();
+        let key = b"k1";
+        let mut data = b"abcd".to_vec();
         let orig = data.clone();
         rc4_transform_inplace(key, &mut data);
         quazal_rc4_transform(key, &mut data);

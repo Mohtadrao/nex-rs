@@ -21,7 +21,7 @@ mod packet_tests {
         let payload = bytes::Bytes::from_static(&[9,9,9]);
         let pkt = PRUDPPacket { header, payload };
         let b = pkt.to_bytes();
-        let parsed = PRUDPPacket::parse(b).expect(\"parse ok\");
+        let parsed = PRUDPPacket::parse(b).expect("parse ok");
         assert_eq!(parsed.header.version as u8, 0u8);
         assert_eq!(parsed.header.src, 1);
         assert_eq!(parsed.header.dst, 2);

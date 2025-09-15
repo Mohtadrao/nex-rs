@@ -6,7 +6,7 @@ use crate::Result;
 use crate::prudp::connection::Connection as PrudpConnection;
 use tracing::info;
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct Session {
     pub id: u32,
     pub conn: Arc<PrudpConnection>,

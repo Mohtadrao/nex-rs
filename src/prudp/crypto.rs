@@ -37,13 +37,13 @@ mod tests {
 
     #[test]
     fn test_prudp_crypto_roundtrip() {
-        let key = derive_key_stub(42, b\"secret\");
+        let key = derive_key_stub(42, b"secret");
         let mut c1 = PrudpCrypto::new(&key);
-        let mut data = b\"hello world\".to_vec();
+        let mut data = b"hello world".to_vec();
         c1.transform(&mut data);
         // decrypt with fresh cipher reinitialized (same key)
         let mut c2 = PrudpCrypto::new(&key);
         c2.transform(&mut data);
-        assert_eq!(&data, b\"hello world\");
+        assert_eq!(&data, b"hello world");
     }
 }

@@ -1,6 +1,6 @@
-
+use byteorder::{ByteOrder, LittleEndian};
 use bytes::{Bytes, BytesMut, BufMut};
-use byteorder::LittleEndian;
+// use byteorder::LittleEndian;
 
 #[derive(Debug, Clone)]
 pub struct HppPacket {
@@ -17,10 +17,10 @@ impl HppPacket {
     }
 
     pub fn parse(mut b: Bytes) -> anyhow::Result<Self> {
-        if b.len() < 2 { return Err(anyhow::anyhow!(\"hpp packet too short\")); }
+        if b.len() < 2 { return Err(anyhow::anyhow!("hpp packet too short")); }
         let len = LittleEndian::read_u16(&b[..2]) as usize;
         let _ = b.split_to(2);
-        if b.len() < len { return Err(anyhow::anyhow!(\"hpp payload truncated\")); }
+        if b.len() < len { return Err(anyhow::anyhow!("hpp payload truncated")); }
         let payload = b.split_to(len);
         Ok(HppPacket { length: len as u16, payload })
     }

@@ -21,7 +21,7 @@ mod packet_exact_tests {
         b.extend_from_slice(&[9u8,9u8,9u8]); // payload
 
         let bytes = b.freeze();
-        let pkt = PRUDPPacket::parse(bytes.clone()).expect(\"parse v0\");
+        let pkt = PRUDPPacket::parse(bytes.clone()).expect("parse v0");
         assert_eq!(pkt.header.version as u8, 0u8);
         assert_eq!(pkt.payload.len(), 3);
         // Roundtrip encode
@@ -45,7 +45,7 @@ mod packet_exact_tests {
         b.extend_from_slice(&[9u8,9u8,9u8]); // payload
 
         let bytes = b.freeze();
-        let pkt = PRUDPPacket::parse(bytes.clone()).expect(\"parse v1\");
+        let pkt = PRUDPPacket::parse(bytes.clone()).expect("parse v1");
         assert_eq!(pkt.header.version as u8, 1u8);
         assert_eq!(pkt.header.v1_extra.unwrap(), 0xdeadbeefu32);
         let out = pkt.to_bytes();

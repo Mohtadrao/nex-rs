@@ -19,7 +19,7 @@ mod hpp_response_tests {
         body.extend_from_slice(&[9,9,9]);
         let payload = Bytes::from(body);
         let framed = crate::hpp::packet::HppPacket::encode(&payload);
-        let res = handler.on_hpp_message(framed.into()).await.expect(\"handler call\").expect(\"some response\");
+        let res = handler.on_hpp_message(framed.into()).await.expect("handler call").expect("some response");
         assert_eq!(res[0], 1u8);
         assert_eq!(res.len(), 4);
     }

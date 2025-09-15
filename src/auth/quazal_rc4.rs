@@ -10,8 +10,8 @@ mod tests {
 
     #[test]
     fn test_quazal_wrapper() {
-        let mut data = b\"testing\".to_vec();
-        let key = b\"k\";
+        let mut data = b"testing".to_vec();
+        let key = b"k";
         let mut orig = data.clone();
         quazal_rc4_transform(key, &mut data);
         // decrypt

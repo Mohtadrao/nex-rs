@@ -8,10 +8,10 @@ mod prudp_crypto_test {
 
     #[test]
     fn test_session_key_derivation_and_use() {
-        let ticket = b\"KRBabc\".to_vec();
+        let ticket = b"KRBabc".to_vec();
         let salt = 0x01020304u32;
         let key = derive_session_key_from_ticket(&ticket, salt).unwrap();
-        let mut payload = b\"encryptme\".to_vec();
+        let mut payload = b"encryptme".to_vec();
         let orig = payload.clone();
         encrypt_packet(&key, &mut payload);
         decrypt_packet(&key, &mut payload);

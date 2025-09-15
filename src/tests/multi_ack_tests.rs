@@ -22,7 +22,7 @@ mod multi_ack_tests {
         };
         let pkt = PRUDPPacket { header, payload: Bytes::from(vec![]) };
         let b = pkt.to_bytes();
-        let parsed = PRUDPPacket::parse(b).expect(\"parse ok\");
+        let parsed = PRUDPPacket::parse(b).expect("parse ok");
         assert!(parsed.header.flags.contains(Flags::MULTI_ACK));
         assert_eq!(parsed.header.multi_ack_mask.unwrap(), 0b1111);
     }

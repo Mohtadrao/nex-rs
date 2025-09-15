@@ -3,13 +3,13 @@
 // validate_ticket returns true only for empty tickets (keeps legacy test behavior) or tickets starting with 'KRB' magic.
 pub fn validate_ticket(ticket: &[u8]) -> Result<bool, Box<dyn std::error::Error>> {
     if ticket.is_empty() { return Ok(true); }
-    if ticket.len() >= 3 && &ticket[0..3] == b\"KRB\" { return Ok(true); }
+    if ticket.len() >= 3 && &ticket[0..3] == b"KRB" { return Ok(true); }
     Ok(false)
 }
 
 // helper to create a dummy 'KRB' ticket for testing purposes
 pub fn make_dummy_ticket(payload: &[u8]) -> Vec<u8> {
-    let mut v = b\"KRB\".to_vec();
+    let mut v = b"KRB".to_vec();
     v.extend_from_slice(payload);
     v
 }
