@@ -1,0 +1,215 @@
+
+use std::collections::{BTreeMap, HashMap};
+use std::time::{Instant, Duration};
+use parking_lot::Mutex;
+use anyhow::Result;
+
+/// Sliding window tracker with receive-side duplicate suppression and NAK policy.
+#[derive(Debug)]
+pub struct SlidingWindow {
+    pub rtt_ref: Option<std::sync::Arc<crate::rtt::RTT>>,
+
+    pub window_size: u16,
+    pub base: u16, // tx lowest unacked sequence
+    pub next_seq: u16, // tx next seq
+    pub pending: BTreeMap<u16, Instant>,
+    pub rtt: Duration,
+    pub retry_timeout: Duration,
+    pub max_retries: u8,
+    pub inner: Mutex<()>,
+
+    // receive-side state
+    pub recv_base: u16,
+    pub recv_buffer: BTreeMap<u16, Vec<u8>>,
+    pub seen: BTreeMap<u16, Instant>, // when we last saw sequence (for duplicate suppression)
+    pub dup_ttl: Duration, // time to remember seen sequences
+
+    // NAK policy: track how many times we've requested a NAK for a particular hole sequence
+    pub nak_backoff: HashMap<u16, u8>,
+    pub nak_max_repeat: u8,
+    pub nak_cooldown: Duration,
+    pub last_nak_time: HashMap<u16, Instant>,
+    pub nak_threshold: u16, // how many missing in window to trigger NAK
+}
+
+impl SlidingWindow {
+    pub fn new(window_size: u16) -> Self {
+        Self {
+            window_size,
+            base: 0,
+            next_seq: 1,
+            pending: BTreeMap::new(),
+            rtt: Duration::from_millis(200),
+            retry_timeout: Duration::from_millis(500),
+            max_retries: 5,
+            inner: Mutex::new(()),
+            recv_base: 1,
+            recv_buffer: BTreeMap::new(),
+            seen: BTreeMap::new(),
+            dup_ttl: Duration::from_secs(30),
+            nak_backoff: HashMap::new(),
+            nak_max_repeat: 3,
+            nak_cooldown: Duration::from_millis(500),
+            last_nak_time: HashMap::new(),
+            nak_threshold: 1,
+        }
+    }
+
+    // TRANSMIT helpers omitted for brevity (same as earlier implementations)
+    pub fn can_send(&self) -> bool {
+        let unacked = self.pending.len() as u16;
+        unacked < self.window_size
+    }
+
+    pub fn next_sequence(&mut self) -> u16 {
+        let s = self.next_seq;
+        self.next_seq = self.next_seq.wrapping_add(1);
+        s
+    }
+
+    pub fn mark_sent(&mut self, seq: u16) {
+        self.pending.insert(seq, Instant::now());
+    }
+
+    pub fn mark_acked(&mut self, seq: u16) {
+        self.pending.remove(&seq);
+        while !self.pending.is_empty() && !self.pending.contains_key(&self.base) {
+            self.base = self.base.wrapping_add(1);
+            if self.base == self.next_seq { break; }
+        }
+    }
+
+    pub fn mark_acked_range(&mut self, start: u16, bmask: u32) {
+        for i in 0..32 {
+            if (bmask & (1u32 << i)) != 0 {
+                let seq = start.wrapping_add(i as u16);
+                self.pending.remove(&seq);
+            }
+        }
+        while !self.pending.is_empty() && !self.pending.contains_key(&self.base) {
+            self.base = self.base.wrapping_add(1);
+            if self.base == self.next_seq { break; }
+        }
+    }
+
+    pub fn expired_packets(&self) -> Vec<u16> {
+        let now = Instant::now();
+        self.pending.iter()
+            .filter(|(_, &t)| now.duration_since(t) > self.retry_timeout)
+            .map(|(&s, _)| s)
+            .collect()
+    }
+
+    // RECEIVE helpers -----------------------------------------------------
+    fn purge_seen(&mut self) {
+        let now = Instant::now();
+        let ttl = self.dup_ttl;
+        self.seen.retain(|_, &mut t| now.duration_since(t) < ttl);
+    }
+
+    fn can_nak(&mut self, seq: u16) -> bool {
+        let now = Instant::now();
+        if let Some(last) = self.last_nak_time.get(&seq) {
+            if now.duration_since(*last) < self.nak_cooldown {
+                return false;
+            }
+        }
+        let count = *self.nak_backoff.get(&seq).unwrap_or(&0);
+        if count >= self.nak_max_repeat {
+            return false;
+        }
+        // record attempt
+        self.nak_backoff.insert(seq, count + 1);
+        self.last_nak_time.insert(seq, now);
+        true
+    }
+
+    pub fn offer_receive(&mut self, seq: u16, payload: Vec<u8>) -> (Vec<Vec<u8>>, Option<(u16, u32)>) {
+        // Purge old seen entries
+        self.purge_seen();
+
+        // Duplicate detection
+        if self.seen.contains_key(&seq) {
+            return (vec![], None);
+        }
+        self.seen.insert(seq, Instant::now());
+
+        if seq < self.recv_base {
+            return (vec![], None);
+        }
+
+        self.recv_buffer.insert(seq, payload);
+
+        let mut ready = Vec::new();
+        loop {
+            if let Some(p) = self.recv_buffer.remove(&self.recv_base) {
+                ready.push(p);
+                self.recv_base = self.recv_base.wrapping_add(1);
+            } else {
+                break;
+            }
+        }
+
+        // Build NAK mask: look ahead up to 32 seqs and mark holes
+        let mut mask = 0u32;
+        let mut found_hole = false;
+        for i in 0..32u16 {
+            let s = self.recv_base.wrapping_add(i);
+            if !self.recv_buffer.contains_key(&s) {
+                mask |= 1u32 << i;
+                found_hole = true;
+            }
+        }
+
+        if found_hole {
+            // Optionally only NAK when the number of holes exceeds threshold
+            let holes = mask.count_ones() as u16;
+            if holes >= self.nak_threshold {
+                // Only emit a NAK if allowed by backoff for the base seq
+                if self.can_nak(self.recv_base) {
+                    return (ready, Some((self.recv_base, mask)));
+                } else {
+                    return (ready, None);
+                }
+            }
+        }
+
+        (ready, None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nak_backoff() {
+        let mut w = SlidingWindow::new(8);
+        // create a hole by receiving seq 1 and 3
+        let (_, n1) = w.offer_receive(1, vec![1]);
+        assert!(n1.is_none());
+        // first time we receive 3 we should get a NAK for base 2
+        let (_, n2) = w.offer_receive(3, vec![3]);
+        assert!(n2.is_some());
+        // second time we receive 3 again, NAK should be suppressed by backoff
+        let (_, n3) = w.offer_receive(3, vec![3]);
+        assert!(n3.is_none());
+    }
+}
+
+
+impl SlidingWindow {
+    /// Attach an RTT estimator reference so retry_timeout can be dynamic.
+    pub fn attach_rtt(&mut self, rtt: std::sync::Arc<crate::rtt::RTT>) {
+        self.rtt_ref = Some(rtt);
+    }
+
+    /// Compute current retry timeout using attached RTT estimator if present.
+    pub fn current_retry_timeout(&self) -> std::time::Duration {
+        if let Some(ref r) = self.rtt_ref {
+            r.estimate_retry_timeout()
+        } else {
+            self.retry_timeout
+        }
+    }
+}

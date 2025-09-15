@@ -1,0 +1,204 @@
+
+use bytes::{BufMut, BytesMut, Bytes};
+use byteorder::{LittleEndian};
+use std::convert::TryFrom;
+use anyhow::Context;
+
+bitflags::bitflags! {
+    pub struct Flags: u8 {
+        const ACK = 0x01;
+        const RELIABLE = 0x02;
+        const NEED_ACK = 0x04;
+        const HAS_SIZE = 0x08;
+        const MULTI_ACK = 0x10;
+        const SIGNED = 0x20;
+        const NEW_CONN = 0x40;
+        const PING = 0x80;
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Version { V0 = 0, V1 = 1 }
+
+impl TryFrom<u8> for Version {
+    type Error = anyhow::Error;
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        match v {
+            0 => Ok(Version::V0),
+            1 => Ok(Version::V1),
+            _ => Err(anyhow::anyhow!(format!(\"unknown version {}\", v))),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PRUDPHeader {
+    pub version: Version,
+    pub src: u8,
+    pub dst: u8,
+    pub flags: Flags,
+    pub session_id: u8,
+    pub seq: u16,
+    pub payload_len: Option<u16>,
+    pub signature: Option<[u8;4]>,
+    pub multi_ack_mask: Option<u32>,
+    pub v1_extra: Option<u32>,
+    pub checksum: Option<u32>,
+    pub stream_id: Option<u8>,
+}
+
+impl PRUDPHeader {
+    /// Parse header from buffer; supports fields in expected order for v0/v1.
+    pub fn parse(buf: &mut bytes::Bytes) -> anyhow::Result<Self> {
+        // minimum header size: version(1)+src(1)+dst(1)+flags(1)+session(1)+seq(2) = 7 bytes
+        if buf.remaining() < 7 {
+            return Err(anyhow::anyhow!(\"buffer too small for header\"));
+        }
+        let v = buf[0];
+        let version = Version::try_from(v)?;
+        let src = buf[1];
+        let dst = buf[2];
+        let flags = Flags::from_bits_truncate(buf[3]);
+        let session_id = buf[4];
+        let seq = LittleEndian::read_u16(&buf[5..7]);
+        let mut offset = 7usize;
+        let mut payload_len = None;
+        let mut signature = None;
+        let mut multi_ack_mask = None;
+        let mut v1_extra = None;
+        let mut checksum = None;
+        let mut stream_id = None;
+
+        // HAS_SIZE
+        if flags.contains(Flags::HAS_SIZE) {
+            if buf.len() < offset + 2 { return Err(anyhow::anyhow!(\"missing size field\")); }
+            payload_len = Some(LittleEndian::read_u16(&buf[offset..offset+2]));
+            offset += 2;
+        }
+
+        // MULTI_ACK
+        if flags.contains(Flags::MULTI_ACK) {
+            if buf.len() < offset + 4 { return Err(anyhow::anyhow!(\"missing multi_ack mask\")); }
+            multi_ack_mask = Some(LittleEndian::read_u32(&buf[offset..offset+4]));
+            offset += 4;
+        }
+
+        // SIGNED (signature present)
+        if flags.contains(Flags::SIGNED) {
+            if buf.len() < offset + 4 { return Err(anyhow::anyhow!(\"missing signature\")); }
+            let mut s = [0u8;4];
+            s.copy_from_slice(&buf[offset..offset+4]);
+            signature = Some(s);
+            offset += 4;
+        }
+
+        // v1 extra field (if version==V1)
+        if version == Version::V1 {
+            if buf.len() >= offset + 4 {
+                v1_extra = Some(LittleEndian::read_u32(&buf[offset..offset+4]));
+                offset += 4;
+            }
+        }
+
+        // optional checksum at end of header (application specific)
+        if buf.len() >= offset + 4 {
+            checksum = Some(LittleEndian::read_u32(&buf[offset..offset+4]));
+            offset += 4;
+        }
+
+        // optional stream_id if packet carries virtual stream info
+        if buf.len() >= offset + 1 {
+            stream_id = Some(buf[offset]);
+            offset += 1;
+        }
+
+        // consume header bytes
+        let _ = buf.split_to(offset);
+
+        Ok(PRUDPHeader {
+            version, src, dst, flags, session_id, seq,
+            payload_len, signature, multi_ack_mask, v1_extra, checksum, stream_id
+        })
+    }
+
+    
+pub fn encode(&self, buf: &mut BytesMut) {
+    // v0 layout: [ver][src][dst][flags][sess][seq(2)][opt:size(2)][opt:signature(4)][payload...]
+    buf.put_u8(self.version.clone() as u8);
+    buf.put_u8(self.src);
+    buf.put_u8(self.dst);
+    buf.put_u8(self.flags.bits());
+    buf.put_u8(self.session_id);
+    buf.put_u16_le(self.seq);
+    // HAS_SIZE goes next
+    if let Some(len) = self.payload_len {
+        buf.put_u16_le(len);
+    }
+    // MULTI_ACK mask next if present
+    if let Some(mask) = self.multi_ack_mask {
+        buf.put_u32_le(mask);
+    }
+    // SIGNED signature next
+    if let Some(sig) = self.signature {
+        buf.extend_from_slice(&sig);
+    }
+    // v1_extra only valid in V1 and placed after signature
+    if let Some(extra) = self.v1_extra {
+        if let Version::V1 = self.version { buf.put_u32_le(extra); }
+    }
+    // checksum optional
+    if let Some(ch) = self.checksum { buf.put_u32_le(ch); }
+    // stream id optional
+    if let Some(sid) = self.stream_id { buf.put_u8(sid); }
+}
+
+        if let Some(mask) = self.multi_ack_mask {
+            buf.put_u32_le(mask);
+        }
+        if let Some(sig) = self.signature {
+            buf.extend_from_slice(&sig);
+        }
+        if let Some(extra) = self.v1_extra { buf.put_u32_le(extra); }
+        if let Some(ch) = self.checksum { buf.put_u32_le(ch); }
+        if let Some(sid) = self.stream_id { buf.put_u8(sid); }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PRUDPPacket {
+    pub header: PRUDPHeader,
+    pub payload: Bytes,
+}
+
+impl PRUDPPacket {
+    /// Dispatch parser by version; uses the header parser.
+    pub fn parse(mut buf: bytes::Bytes) -> anyhow::Result<Self> {
+        let mut b = buf.clone();
+        let header = PRUDPHeader::parse(&mut b).context(\"parsing header\")?;
+        let payload = if let Some(len) = header.payload_len {
+            if b.remaining() < (len as usize) {
+                return Err(anyhow::anyhow!(\"payload shorter than declared\"));
+            }
+            b.split_to(len as usize)
+        } else {
+            b.split_to(b.remaining())
+        };
+        Ok(PRUDPPacket { header, payload })
+    }
+
+    
+pub fn to_bytes(&self) -> bytes::Bytes {
+    let mut bm = BytesMut::with_capacity(8 + self.payload.len());
+    self.header.encode(&mut bm);
+    bm.extend_from_slice(&self.payload);
+    bm.freeze()
+}
+
+
+    pub fn packet_type(&self) -> PacketType {
+        if self.header.flags.contains(Flags::PING) { return PacketType::Ping; }
+        if self.header.flags.contains(Flags::ACK) { return PacketType::Ack; }
+        if self.header.flags.contains(Flags::NEW_CONN) || self.header.seq == 1 { return PacketType::Connect; }
+        PacketType::Data
+    }
+}
