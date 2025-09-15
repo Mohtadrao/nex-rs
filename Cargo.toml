@@ -35,10 +35,9 @@ hex = "0.4"
 
 # Compression
 flate2 = { version = "1", optional = true }
-
+hmac = "0.12"
 [features]
 default = []
 zlib = ["flate2"]
 lzo = []
 
-hmac = "0.12"
