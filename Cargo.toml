@@ -41,4 +41,3 @@ default = []
 zlib = ["flate2"]
 lzo = []
 
-hmac = "0.12"
