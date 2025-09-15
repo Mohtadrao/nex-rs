@@ -6,15 +6,16 @@ A Rust port of the **nex-go** project you provided. This is a scaffolded, compil
 
 ```
 src/
-  error.rs           // error type (port of error.go)
-  result_codes.rs    // constants (to be fully translated)
-  counter.rs         // atomic counter (counter.go)
-  rtt.rs             // round-trip-time estimator (rtt.go)
-  timeout_manager.rs // lightweight timeout helpers (timeout_manager.go)
-  types/             // PID and other basic types
-  byte_stream.rs     // read/write helpers (byte_stream_*)
-  prudp/             // PRUDP protocol (packet, server, connection)
-  hpp/               // HPP protocol (packet, server, client)
+    auth/ // authentication-related modules
+    bin/ // example binaries (e.g. nex_server)
+    compression/ // zlib/LZO and other compression stubs
+    constants/ // enums and protocol constants
+    crypto/ // RC4, Quazal, Kerberos stubs
+    hpp/ // HPP protocol (packet, server, client)
+    prudp/ // PRUDP protocol (packet, server, connection)
+    services/ // service skeletons (auth, etc.)
+    tests/ // Go → Rust test scaffolding
+    types/ // PID and other basic types
 ```
 
 ## Next steps to complete the port
@@ -49,3 +50,34 @@ See TODO.md for current progress and remaining tasks.
 ## Crypto & SlidingWindow tests
 
 Run `cargo test --test sliding_window_ported -- --nocapture` to see sliding window behavior. PRUDP crypto tests exist too.
+
+
+## Running Commands
+-cargo clean
+-cargo build (contain warning, 0 errors)
+-cargo test (contain warning, 0 errors)
+-cargo run
+
+## Contributing
+
+Contributions are welcome! 🎉
+
+Feel free to fork this repo, make your own branches, and upload code publicly.
+
+Submit pull requests for new features, bug fixes, or improvements.
+
+Check the TODO.md
+ and PORT_TODO.md
+ for areas where help is especially needed.
+
+Please keep commits clear and focused — small PRs are easier to review.
+
+Whether you’re fixing a bug, adding documentation, or porting another Go file to Rust, your help is appreciated.
+
+
+
+Credits
+
+Original Go implementation: PretendoNetwork/nex-go
+
+Rust port: this project (nex-rs)
